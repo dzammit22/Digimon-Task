@@ -1,29 +1,32 @@
+// src/state.js — evolution math + robust import/export + evolution event
 import {CATS, SEXP_KEYS, STAGES, LEVEL_THRESHOLDS, BONUS} from './constants.js';
 import {save, load} from './storage.js';
 
 export const LINES = {
   POWER: {
-    chain:["Agumon","Agumon","Agumon","Agumon","Agumon","Agumon"],
-    baseStats:[
+    chain: ["Botamon","Koromon","Agumon","Greymon","MetalGreymon","WarGreymon"],
+    baseStats: [
       {hp:30, atk:2, def:2, spd:3},{hp:40, atk:3, def:3, spd:3},{hp:60, atk:6, def:6, spd:6},
       {hp:80, atk:10,def:8, spd:7},{hp:100,atk:14,def:12,spd:9},{hp:130,atk:18,def:16,spd:12},
     ]
   },
   ROSE: {
-    chain:["Budmon","Roseling","Roseling","Roseling","Roseling","Roseling"],
-    baseStats:[
+    chain: ["Budmon","Roseling","Bloomon","Thornmon","RoseKnight","RoseKnight"],
+    baseStats: [
       {hp:28, atk:2, def:2, spd:4},{hp:42, atk:4, def:3, spd:6},{hp:62, atk:7, def:6, spd:8},
       {hp:84, atk:10,def:9, spd:11},{hp:108,atk:13,def:12,spd:14},{hp:140,atk:17,def:16,spd:18},
     ]
   },
-  TECH: { chain:["Agumon","Agumon","Agumon","Agumon","Agumon","Agumon"],
-    baseStats:[
+  TECH: {
+    chain: ["Botamon","Koromon","Agumon","Greymon","MetalGreymon","WarGreymon"],
+    baseStats: [
       {hp:28, atk:2, def:2, spd:4},{hp:38, atk:3, def:3, spd:5},{hp:56, atk:6, def:6, spd:8},
       {hp:74, atk:9, def:8, spd:11},{hp:92, atk:12,def:11,spd:14},{hp:120,atk:16,def:15,spd:18},
     ]
   },
-  GUARD: { chain:["Agumon","Agumon","Agumon","Agumon","Agumon","Agumon"],
-    baseStats:[
+  GUARD: {
+    chain: ["Botamon","Koromon","Agumon","Greymon","MetalGreymon","WarGreymon"],
+    baseStats: [
       {hp:34, atk:2, def:3, spd:2},{hp:46, atk:3, def:4, spd:3},{hp:70, atk:6, def:8, spd:5},
       {hp:92, atk:9, def:12,spd:6},{hp:120,atk:12,def:15,spd:8},{hp:150,atk:15,def:19,spd:10},
     ]
@@ -50,7 +53,11 @@ export function defaultState(){
 export let state = load() || defaultState();
 export function persist(){ save(state); }
 
-/* ---------- Level/line math ---------- */
+/* ---------- Helpers ---------- */
+export function getSpeciesName(){
+  const chain = LINES[state.line]?.chain || LINES.POWER.chain;
+  return chain[Math.min(chain.length-1, Math.max(0, state.speciesIndex))];
+}
 export function expToLevel(total){
   let level=1, next=LEVEL_THRESHOLDS[1];
   for(let i=0;i<LEVEL_THRESHOLDS.length;i++){
@@ -59,7 +66,6 @@ export function expToLevel(total){
   return {level:Math.min(level,6), cur:total, curFloor: LEVEL_THRESHOLDS[(Math.min(level,6)-1)], next};
 }
 export function stageFromLevel(level){ return [STAGES.BABY_I,STAGES.BABY_II,STAGES.ROOKIE,STAGES.CHAMPION,STAGES.ULTIMATE,STAGES.MEGA][Math.max(1,level)-1]; }
-
 export function pickLine(sexp){
   const sum = SEXP_KEYS.reduce((a,k)=>a+sexp[k],0)||1;
   const share = Object.fromEntries(SEXP_KEYS.map(k=>[k, sexp[k]/sum]));
@@ -90,20 +96,34 @@ export function recalcLineStats(resetHP=false){
 }
 
 export function recalcTotals(){
+  const before = { level: state.level, line: state.line, stage: state.stage, species: getSpeciesName() };
+
   state.totalExp = SEXP_KEYS.reduce((a,k)=>a+(Number(state.sexp[k])||0),0);
   const {level} = expToLevel(state.totalExp);
-  const prevLevel=state.level; state.level=level; state.stage=stageFromLevel(level);
-  if(level!==prevLevel){
-    const newLine=pickLine(state.sexp);
-    if(level>=3) state.line=newLine;
-    state.speciesIndex=Math.min(5, level-1);
-    recalcLineStats(true);
-  }else{
-    recalcLineStats(false);
+  state.level = level;
+  state.stage = stageFromLevel(level);
+
+  const changedLevel = level !== before.level;
+  if(changedLevel){
+    const newLine = pickLine(state.sexp);
+    if(level>=3) state.line = newLine;
+    state.speciesIndex = Math.min(5, level-1);
+  }
+
+  recalcLineStats(changedLevel);
+
+  // If species changed, fire an evolution event
+  const afterSpecies = getSpeciesName();
+  if(afterSpecies !== before.species){
+    try {
+      window.dispatchEvent(new CustomEvent('vt:evolved', {
+        detail: { level: state.level, stage: state.stage, line: state.line, species: afterSpecies }
+      }));
+    } catch(_) {}
   }
 }
 
-/* ---------- Import/Export helpers (robust) ---------- */
+/* ---------- Import/Export ---------- */
 function normalizeTask(raw){
   return {
     id: String(raw.id ?? (Date.now()+Math.random()).toString(36)),
@@ -118,12 +138,11 @@ function normalizeTask(raw){
   };
 }
 
-/** Build a valid in-memory state from a raw JSON object */
+export const SAVE_VERSION = 2;
+
 export function importSave(raw){
   if(!raw || typeof raw !== 'object') throw new Error('Not an object');
   const base = defaultState();
-
-  // Shallow overlay with defaults
   const merged = {
     ...base,
     ...raw,
@@ -131,23 +150,20 @@ export function importSave(raw){
     sexp: {...base.sexp, ...(raw.sexp||{})},
     tasks: Array.isArray(raw.tasks) ? raw.tasks.map(normalizeTask) : [],
   };
-
-  // Force numeric types
   for(const k of Object.keys(merged.sexp)) merged.sexp[k] = Number(merged.sexp[k])||0;
   merged.tasksDone = merged.tasks.filter(t=>t.done).length;
 
-  // Commit to the singleton state (mutate, don’t reassign)
-  Object.keys(state).forEach(k=>{ delete state[k]; });
+  // Commit by mutation so other modules see the same object
+  Object.keys(state).forEach(k=> delete state[k]);
   Object.assign(state, merged);
 
-  recalcTotals();          // sets level/stage/line/totalExp
-  recalcLineStats(true);   // derive stats/maxhp, heal to max on import
+  recalcTotals();
+  recalcLineStats(true);
   persist();
   return { tasks: state.tasks.length, level: state.level, line: state.line };
 }
 
 export function exportSave(){
-  // Pretty for human eyeballs + include version
   return JSON.stringify({ __v: SAVE_VERSION, ...state }, null, 2);
 }
 

@@ -31,9 +31,11 @@ export const LINES = {
 };
 
 const now = ()=>Date.now();
+export const SAVE_VERSION = 2;
 
 export function defaultState(){
   return {
+    __v: SAVE_VERSION,
     createdAt: now(), lastTick: now(),
     line:'POWER', level:1, speciesIndex:0,
     name:'Partner', stage:STAGES.BABY_I,
@@ -46,9 +48,9 @@ export function defaultState(){
 }
 
 export let state = load() || defaultState();
-
 export function persist(){ save(state); }
 
+/* ---------- Level/line math ---------- */
 export function expToLevel(total){
   let level=1, next=LEVEL_THRESHOLDS[1];
   for(let i=0;i<LEVEL_THRESHOLDS.length;i++){
@@ -76,7 +78,7 @@ export function recalcLineStats(resetHP=false){
   state.base = {...LINES[state.line].baseStats[idx]};
   const bonus={hp:0,atk:0,def:0,spd:0};
   for(const k of SEXP_KEYS){
-    const v=state.sexp[k]; const b=BONUS[k];
+    const v=Number(state.sexp[k]||0); const b=BONUS[k];
     if(b.hpPer!==Infinity)  bonus.hp  += Math.floor(v/b.hpPer);
     if(b.atkPer!==Infinity) bonus.atk += Math.floor(v/b.atkPer);
     if(b.defPer!==Infinity) bonus.def += Math.floor(v/b.defPer);
@@ -88,7 +90,7 @@ export function recalcLineStats(resetHP=false){
 }
 
 export function recalcTotals(){
-  state.totalExp = SEXP_KEYS.reduce((a,k)=>a+(state.sexp[k]||0),0);
+  state.totalExp = SEXP_KEYS.reduce((a,k)=>a+(Number(state.sexp[k])||0),0);
   const {level} = expToLevel(state.totalExp);
   const prevLevel=state.level; state.level=level; state.stage=stageFromLevel(level);
   if(level!==prevLevel){
@@ -96,9 +98,60 @@ export function recalcTotals(){
     if(level>=3) state.line=newLine;
     state.speciesIndex=Math.min(5, level-1);
     recalcLineStats(true);
+  }else{
+    recalcLineStats(false);
   }
 }
 
+/* ---------- Import/Export helpers (robust) ---------- */
+function normalizeTask(raw){
+  return {
+    id: String(raw.id ?? (Date.now()+Math.random()).toString(36)),
+    title: String(raw.title ?? 'Untitled'),
+    cat: CATS.includes(raw.cat) ? raw.cat : 'Other',
+    exp: Math.max(1, Number(raw.exp) || 10),
+    due: typeof raw.due === 'string' ? raw.due : '',
+    notes: String(raw.notes ?? ''),
+    done: !!raw.done,
+    createdAt: Number(raw.createdAt) || Date.now(),
+    completedAt: raw.completedAt != null ? Number(raw.completedAt) : null,
+  };
+}
+
+/** Build a valid in-memory state from a raw JSON object */
+export function importSave(raw){
+  if(!raw || typeof raw !== 'object') throw new Error('Not an object');
+  const base = defaultState();
+
+  // Shallow overlay with defaults
+  const merged = {
+    ...base,
+    ...raw,
+    __v: SAVE_VERSION,
+    sexp: {...base.sexp, ...(raw.sexp||{})},
+    tasks: Array.isArray(raw.tasks) ? raw.tasks.map(normalizeTask) : [],
+  };
+
+  // Force numeric types
+  for(const k of Object.keys(merged.sexp)) merged.sexp[k] = Number(merged.sexp[k])||0;
+  merged.tasksDone = merged.tasks.filter(t=>t.done).length;
+
+  // Commit to the singleton state (mutate, don’t reassign)
+  Object.keys(state).forEach(k=>{ delete state[k]; });
+  Object.assign(state, merged);
+
+  recalcTotals();          // sets level/stage/line/totalExp
+  recalcLineStats(true);   // derive stats/maxhp, heal to max on import
+  persist();
+  return { tasks: state.tasks.length, level: state.level, line: state.line };
+}
+
+export function exportSave(){
+  // Pretty for human eyeballs + include version
+  return JSON.stringify({ __v: SAVE_VERSION, ...state }, null, 2);
+}
+
+/* ---------- Tick ---------- */
 export function tick(){
   const dt=Math.max(0, Math.floor((now()-state.lastTick)/1000));
   if(dt>0){

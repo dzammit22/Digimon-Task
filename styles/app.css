@@ -74,3 +74,6 @@ canvas#sprite{width:72px; height:72px; image-rendering: pixelated; border:1px so
 .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-variant-numeric: tabular-nums}
 input,select,textarea{width:100%; border:1px solid #2c5a3c; border-radius:10px; padding:10px; font-size:var(--fs-14); background:#fff; color:#153626}
 .item b.done{opacity:.55; text-decoration:line-through}
+@keyframes vt-pulse { 0%{box-shadow:0 0 0 0 rgba(41,227,125,.45)} 100%{box-shadow:0 0 0 14px rgba(41,227,125,0)} }
+.bar.pulse { animation: vt-pulse .8s ease-out 1; }
+#evoCanvas { box-shadow: 0 0 0 2px rgba(43,83,59,.2), 0 10px 20px rgba(0,0,0,.15); }

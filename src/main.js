@@ -1,12 +1,12 @@
-// src/main.js
+// src/main.js - Updated with evolution system
 import {
   state,
   recalcTotals,
   recalcLineStats,
   tick,
   persist,
-  exportSave,     // ← added
-  importSave      // ← added
+  exportSave,
+  importSave
 } from './state.js';
 
 import {MENUS} from './constants.js';
@@ -117,7 +117,7 @@ function openSettings(){
     }
   };
 
-  // ----- Export (uses robust exportSave) -----
+  // Export
   document.getElementById('export').onclick = ()=>{
     const blob = new Blob([exportSave()], {type:'application/json'});
     const url  = URL.createObjectURL(blob);
@@ -126,7 +126,7 @@ function openSettings(){
     URL.revokeObjectURL(url);
   };
 
-  // ----- Import (uses robust importSave) -----
+  // Import
   document.getElementById('import').onclick = ()=>{
     const inp = document.createElement('input');
     inp.type = 'file';
@@ -137,7 +137,7 @@ function openSettings(){
       reader.onload = ()=>{
         try{
           const raw = JSON.parse(reader.result);
-          const res = importSave(raw); // validates, normalizes, recomputes, persists
+          const res = importSave(raw);
           refresh();
           setTimeout(()=>{
             toast(`Imported ${res.tasks} tasks • L${res.level} (${res.line}) ✔️`);
@@ -160,4 +160,4 @@ refresh();
 renderMenu();
 setIndex(0);
 requestAnimationFrame(tick);
-setTimeout(()=>toast('Modular build ready. Add your first task! 💡', 1400), 500);
+setTimeout(()=>toast('Enhanced Vital Tasks ready! Complete tasks to evolve your partner! 🧬✨', 2000), 500);

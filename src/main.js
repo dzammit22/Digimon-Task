@@ -1,12 +1,7 @@
-// src/main.js
+// src/main.js — wires menu + evolution popup + robust import/export
 import {
-  state,
-  recalcTotals,
-  recalcLineStats,
-  tick,
-  persist,
-  exportSave,     // ← added
-  importSave      // ← added
+  state, recalcTotals, recalcLineStats, tick, persist,
+  exportSave, importSave, getSpeciesName
 } from './state.js';
 
 import {MENUS} from './constants.js';
@@ -16,6 +11,7 @@ import {openTasks} from './tasks.js';
 import {openCalendar} from './calendar.js';
 import {openTrain} from './train.js';
 import {openBattle} from './battle.js';
+import {drawSprite} from './sprites.js';
 
 const btnBack = document.getElementById('btnBack');
 const btnOk   = document.getElementById('btnOk');
@@ -45,6 +41,24 @@ window.addEventListener('keydown', e=>{
   if(e.key==='ArrowDown'||e.key==='PageDown') btnNext.click();
   if(e.key==='Enter'||e.key===' ')            btnOk.click();
   if(e.key==='Escape'||e.key==='Backspace')   btnBack.click();
+});
+
+/* ---------- Evolution popup ---------- */
+window.addEventListener('vt:evolved', (e)=>{
+  const {level, stage, line, species} = e.detail;
+  showOverlay(`
+    <div class="center">
+      <h3 style="margin:.2em 0; font-size:var(--fs-18)">Evolution!</h3>
+      <div class="tiny">Level ${level} • ${line}</div>
+      <canvas id="evoCanvas" width="144" height="144"
+        style="image-rendering:pixelated;border:1px solid #2b533b;border-radius:12px;background:#ffffff;margin:8px auto;display:block"></canvas>
+      <div><b>${species}</b> • <span class="pill">${stage}</span></div>
+      <div class="flex" style="margin-top:10px"><button class="btn" id="ok">Nice!</button></div>
+    </div>
+  `);
+  const ctx = document.getElementById('evoCanvas').getContext('2d');
+  drawSprite(ctx, species, 144);
+  document.getElementById('ok').onclick = hideOverlay;
 });
 
 /* ---------- Panels ---------- */
@@ -95,29 +109,20 @@ function openSettings(){
     </div>
   `);
 
-  // Basic settings
   document.getElementById('save').onclick = ()=>{
     state.name = (document.getElementById('nick').value||'').trim() || state.name;
     persist(); refresh(); hideOverlay();
   };
-
   document.getElementById('reset').onclick = ()=>{
     if(confirm('Reset everything? This cannot be undone.')){
-      // Soft reset without losing createdAt
       state.sexp = Object.fromEntries(Object.keys(state.sexp).map(k=>[k,0]));
-      state.totalExp = 0;
-      state.tasks = [];
-      state.tasksDone = 0;
-      state.wins = 0;
-      state.battles = 0;
-      state.level = 1;
-      state.line = 'POWER';
-      state.speciesIndex = 0;
+      state.totalExp = 0; state.tasks = []; state.tasksDone = 0;
+      state.wins = 0; state.battles = 0; state.level = 1;
+      state.line = 'POWER'; state.speciesIndex = 0;
       recalcTotals(); recalcLineStats(true); persist(); refresh(); hideOverlay();
     }
   };
 
-  // ----- Export (uses robust exportSave) -----
   document.getElementById('export').onclick = ()=>{
     const blob = new Blob([exportSave()], {type:'application/json'});
     const url  = URL.createObjectURL(blob);
@@ -126,7 +131,6 @@ function openSettings(){
     URL.revokeObjectURL(url);
   };
 
-  // ----- Import (uses robust importSave) -----
   document.getElementById('import').onclick = ()=>{
     const inp = document.createElement('input');
     inp.type = 'file';
@@ -137,15 +141,10 @@ function openSettings(){
       reader.onload = ()=>{
         try{
           const raw = JSON.parse(reader.result);
-          const res = importSave(raw); // validates, normalizes, recomputes, persists
+          const res = importSave(raw);
           refresh();
-          setTimeout(()=>{
-            toast(`Imported ${res.tasks} tasks • L${res.level} (${res.line}) ✔️`);
-            hideOverlay();
-          }, 50);
-        }catch(err){
-          alert('Import failed: ' + (err?.message || err));
-        }
+          setTimeout(()=>{ toast(`Imported ${res.tasks} tasks • L${res.level} (${res.line}) ✔️`); hideOverlay(); }, 50);
+        }catch(err){ alert('Import failed: ' + (err?.message || err)); }
       };
       reader.readAsText(f);
     };

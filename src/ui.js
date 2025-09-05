@@ -1,6 +1,7 @@
+// src/ui.js - Enhanced UI with dynamic sprite selection
 import {MENUS} from './constants.js';
 import {state, expToLevel} from './state.js';
-import {drawSprite} from './sprites.js';
+import {drawSprite, getSpriteForLineAndLevel} from './sprites.js';
 
 export const els = {
   tasksDone: document.getElementById('tasksDone'),
@@ -37,18 +38,50 @@ export function refresh(){
   els.clock.textContent = fmtClock(new Date());
   const {curFloor,next} = expToLevel(state.totalExp);
   const span=next-curFloor||1, prog=Math.min(1,(state.totalExp-curFloor)/span);
-  els.xpbar.style.width=(prog*100)+'%'; els.xpbarLabel.textContent=`EXP ${state.totalExp} • L${state.level}`;
-  els.level.textContent = state.level; els.level2.textContent = state.level; els.xpnum.textContent = state.totalExp;
-  const hpPct = Math.min(1, state.hp/(state.maxhp||1)); els.hpbar.style.width=(hpPct*100)+'%';
+  els.xpbar.style.width=(prog*100)+'%'; 
+  els.xpbarLabel.textContent=`EXP ${state.totalExp} • L${state.level}`;
+  els.level.textContent = state.level; 
+  els.level2.textContent = state.level; 
+  els.xpnum.textContent = state.totalExp;
+  
+  const hpPct = Math.min(1, state.hp/(state.maxhp||1)); 
+  els.hpbar.style.width=(hpPct*100)+'%';
   els.hpbarLabel.textContent = `HP ${state.hp}/${state.maxhp}`;
   els.tasksDone.textContent = state.tasksDone;
   els.stage.textContent = state.stage;
-  els.atk.textContent = state.stats.atk; els.def.textContent = state.stats.def; els.spd.textContent = state.stats.spd;
+  els.atk.textContent = state.stats.atk; 
+  els.def.textContent = state.stats.def; 
+  els.spd.textContent = state.stats.spd;
 
-  // draw sprite
+  // Enhanced sprite drawing with proper evolution forms
   const ctx = els.sprite.getContext('2d');
-  const name = state.line==='ROSE' ? (state.level===1?'Budmon':'Roseling') : 'Agumon';
-  drawSprite(ctx, name, 72);
+  const spriteName = getSpriteForLineAndLevel(state.line, state.level);
+  drawSprite(ctx, spriteName, 72);
+
+  // Update digimon name based on sprite
+  els.diginame.textContent = state.name || spriteName;
 
   renderMenu();
+}
+
+// Evolution animation effect
+export function playEvolutionEffect() {
+  try {
+    const sprite = els.sprite;
+    if (!sprite) return;
+    
+    // Add evolution glow effect
+    sprite.style.filter = 'brightness(1.8) saturate(1.5)';
+    sprite.style.transform = 'scale(1.1)';
+    sprite.style.transition = 'all 0.6s ease-in-out';
+    
+    // Reset after animation
+    setTimeout(() => {
+      sprite.style.filter = 'none';
+      sprite.style.transform = 'scale(1)';
+      sprite.style.transition = 'none';
+    }, 800);
+  } catch (e) {
+    console.warn('Evolution effect failed:', e);
+  }
 }

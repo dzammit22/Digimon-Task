@@ -1,9 +1,11 @@
 import {CATS, SEXP_KEYS} from './constants.js';
 import {state, recalcTotals, recalcLineStats, persist} from './state.js';
 import {showOverlay, hideOverlay, toast} from './overlays.js';
+import {refresh, els} from './ui.js'; // ← for immediate UI updates
 
 const escapeHtml = s => (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 
+/* ---------------- Tasks panel ---------------- */
 export function openTasks(){
   const items = state.tasks
     .slice().sort((a,b)=>(a.done===b.done? (a.due||'').localeCompare(b.due||'') : (a.done?1:-1)))
@@ -31,6 +33,7 @@ export function openTasks(){
   });
 }
 
+/* ---------------- Editor ---------------- */
 export function openTaskEditor(existing=null){
   const cats=CATS.map(c=>`<option value="${c}" ${existing&&existing.cat===c?'selected':''}>${c}</option>`).join('');
   const html = `
@@ -68,12 +71,13 @@ export function openTaskEditor(existing=null){
     document.getElementById('del').onclick=()=>{
       if(confirm('Delete this task?')){
         state.tasks = state.tasks.filter(x=>x.id!==existing.id);
-        persist(); openTasks();
+        persist(); refresh(); openTasks();
       }
     };
   }
 }
 
+/* ---------------- Viewer ---------------- */
 export function openTaskViewer(t){
   const html = `
     <h3 style="margin:.2em 0; font-size:var(--fs-18)">Task</h3>
@@ -92,25 +96,73 @@ export function openTaskViewer(t){
   document.getElementById('delete').onclick=()=>{
     if(confirm('Delete this task?')){
       state.tasks = state.tasks.filter(x=>x.id!==t.id);
-      persist(); openTasks();
+      persist(); refresh(); openTasks();
     }
   };
   document.getElementById('complete')&&(document.getElementById('complete').onclick=()=>completeTask(t.id));
   document.getElementById('undo')&&(document.getElementById('undo').onclick=()=>undoTask(t.id));
 }
 
-function upsertTask(t){ const i=state.tasks.findIndex(x=>x.id===t.id); if(i>=0) state.tasks[i]=t; else state.tasks.push(t); persist(); }
+/* ---------------- Data helpers ---------------- */
+function upsertTask(t){
+  const i=state.tasks.findIndex(x=>x.id===t.id);
+  if(i>=0) state.tasks[i]=t; else state.tasks.push(t);
+  persist();
+}
 
+/* ---------------- Complete / Undo with instant UI + level/evo toast ---------------- */
 export function completeTask(id){
   const t=state.tasks.find(x=>x.id===id); if(!t||t.done) return;
+
+  const prevLevel = state.level;
+  const prevLine  = state.line;
+  const prevStage = state.stage;
+
   t.done=true; t.completedAt=Date.now(); state.tasksDone++;
   if(SEXP_KEYS.includes(t.cat)) state.sexp[t.cat]+=t.exp;
-  recalcTotals(); recalcLineStats(); persist(); toast(`+${t.exp} ${t.cat} EXP!`); openTasks();
+
+  recalcTotals(); recalcLineStats(); persist();
+
+  // Instant overview refresh (bars, level, sprite)
+  refresh();
+  pulseXP();
+
+  // Build a friendly toast
+  let msg = `+${t.exp} ${t.cat} EXP!`;
+  if(state.level > prevLevel){
+    msg += `\n✨ Level up to L${state.level}!`;
+    if(state.stage !== prevStage || state.line !== prevLine){
+      msg += `\n🧬 Evolved to ${state.stage} (${state.line})`;
+    }
+  }
+  toast(msg);
+
+  // Keep the Tasks list open & updated
+  openTasks();
 }
 
 export function undoTask(id){
   const t=state.tasks.find(x=>x.id===id); if(!t||!t.done) return;
   t.done=false; t.completedAt=null; state.tasksDone=Math.max(0,state.tasksDone-1);
   if(SEXP_KEYS.includes(t.cat)) state.sexp[t.cat]=Math.max(0, state.sexp[t.cat]-t.exp);
-  recalcTotals(); recalcLineStats(); persist(); toast('Undone.'); openTasks();
+
+  recalcTotals(); recalcLineStats(); persist();
+  refresh();
+  pulseXP();
+  toast('Undone.');
+  openTasks();
+}
+
+/* ---------------- Small UX: pulse the EXP bar ---------------- */
+function pulseXP(){
+  try{
+    const bar = els.xpbar?.parentElement;
+    if(!bar) return;
+    bar.classList.remove('pulse');
+    // restart animation
+    // eslint-disable-next-line no-unused-expressions
+    void bar.offsetWidth;
+    bar.classList.add('pulse');
+    setTimeout(()=>bar.classList.remove('pulse'), 900);
+  }catch(_){}
 }

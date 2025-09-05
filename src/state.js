@@ -34,7 +34,7 @@ export const LINES = {
 };
 
 const now = ()=>Date.now();
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 2; // ← only here
 
 export function defaultState(){
   return {
@@ -137,8 +137,6 @@ function normalizeTask(raw){
     completedAt: raw.completedAt != null ? Number(raw.completedAt) : null,
   };
 }
-
-export const SAVE_VERSION = 2;
 
 export function importSave(raw){
   if(!raw || typeof raw !== 'object') throw new Error('Not an object');

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no"
+  />
+  <title>Vital Tasks — Modular</title>
+  <link rel="stylesheet" href="./styles/app.css">
+</head>
+<body>
+  <div class="appwrap">
+    <div class="bracelet" id="app">
+      <div class="header">
+        <div class="kv"><span>✅</span><span id="tasksDone" class="mono">0</span></div>
+        <div class="kv"><span>⭐</span><span id="level" class="mono">1</span></div>
+        <div class="logo">VITAL • TASKS</div>
+      </div>
+
+      <div class="screen">
+        <div class="statusbar">
+          <div class="kv">EXP <span id="xpnum" class="mono">0</span></div>
+          <div class="clock mono" id="clock">--:--</div>
+        </div>
+
+        <div class="bars">
+          <div class="bar" id="xpbar"><span></span><div class="label">EXP</div></div>
+          <div class="bar hp" id="hpbar"><span></span><div class="label">HP</div></div>
+        </div>
+
+        <div class="face">
+          <canvas id="sprite" width="44" height="44" aria-label="Sprite"></canvas>
+          <div class="info">
+            <div><b id="diginame">Partner</b> <span class="pill mono" id="stage">Baby I</span></div>
+            <div>Level <span class="mono" id="level2">1</span></div>
+            <div>ATK <span class="mono" id="atk">5</span> • DEF <span class="mono" id="def">5</span> • SPD <span class="mono" id="spd">5</span></div>
+            <div class="tiny">Finish tasks to gain SEXP → evolve and boost stats!</div>
+          </div>
+        </div>
+
+        <div class="menu" id="menu"></div>
+      </div>
+
+      <div class="softkeys">
+        <button class="btn secondary" id="btnBack" aria-label="Back">Back</button>
+        <button class="btn" id="btnOk" aria-label="OK">OK</button>
+        <button class="btn secondary" id="btnNext" aria-label="Next">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom-sheet overlay -->
+  <div class="overlay" id="overlay"><div class="card" id="card"></div></div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

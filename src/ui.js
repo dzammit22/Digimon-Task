@@ -1,5 +1,6 @@
+// src/ui.js — overview rendering (uses exact species name)
 import {MENUS} from './constants.js';
-import {state, expToLevel} from './state.js';
+import {state, expToLevel, getSpeciesName} from './state.js';
 import {drawSprite} from './sprites.js';
 
 export const els = {
@@ -45,10 +46,10 @@ export function refresh(){
   els.stage.textContent = state.stage;
   els.atk.textContent = state.stats.atk; els.def.textContent = state.stats.def; els.spd.textContent = state.stats.spd;
 
-  // draw sprite
   const ctx = els.sprite.getContext('2d');
-  const name = state.line==='ROSE' ? (state.level===1?'Budmon':'Roseling') : 'Agumon';
-  drawSprite(ctx, name, 72);
+  const species = getSpeciesName();
+  drawSprite(ctx, species, 72);
+  els.diginame.textContent = species;
 
   renderMenu();
 }

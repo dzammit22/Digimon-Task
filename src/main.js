@@ -1,6 +1,16 @@
-import {state, recalcTotals, recalcLineStats, tick, persist} from './state.js';
+// src/main.js
+import {
+  state,
+  recalcTotals,
+  recalcLineStats,
+  tick,
+  persist,
+  exportSave,     // ← added
+  importSave      // ← added
+} from './state.js';
+
 import {MENUS} from './constants.js';
-import {els, refresh, renderMenu, menuIndex} from './ui.js';
+import {els, refresh, renderMenu} from './ui.js';
 import {showOverlay, hideOverlay, toast} from './overlays.js';
 import {openTasks} from './tasks.js';
 import {openCalendar} from './calendar.js';
@@ -12,35 +22,42 @@ const btnOk   = document.getElementById('btnOk');
 const btnNext = document.getElementById('btnNext');
 
 let idx = 0;
-function setIndex(i){ idx = (i+MENUS.length)%MENUS.length; document.querySelectorAll('#menu .item').forEach((n, k)=> n.classList.toggle('active', k===idx)); }
+function setIndex(i){
+  idx = (i + MENUS.length) % MENUS.length;
+  const items = document.querySelectorAll('#menu .item');
+  items.forEach((n, k)=> n.classList.toggle('active', k===idx));
+}
 
+/* ---------- Menu actions ---------- */
 btnNext.onclick = ()=>{ setIndex(idx+1); };
 btnBack.onclick = ()=>{ hideOverlay(); };
 btnOk.onclick   = ()=>{
   const id = MENUS[idx].id;
-  if(id==='tasks') openTasks();
+  if(id==='tasks')    openTasks();
   if(id==='calendar') openCalendar();
-  if(id==='status') openStatus();
-  if(id==='train') openTrain();
-  if(id==='battle') openBattle();
+  if(id==='status')   openStatus();
+  if(id==='train')    openTrain();
+  if(id==='battle')   openBattle();
   if(id==='settings') openSettings();
 };
 
 window.addEventListener('keydown', e=>{
   if(e.key==='ArrowDown'||e.key==='PageDown') btnNext.click();
-  if(e.key==='Enter'||e.key===' ') btnOk.click();
-  if(e.key==='Escape'||e.key==='Backspace') btnBack.click();
+  if(e.key==='Enter'||e.key===' ')            btnOk.click();
+  if(e.key==='Escape'||e.key==='Backspace')   btnBack.click();
 });
 
+/* ---------- Panels ---------- */
 function openStatus(){
   const rows = Object.entries(state.sexp).map(([k,v])=>{
-    const pct = state.totalExp? Math.min(1, v/state.totalExp) : 0;
+    const pct = state.totalExp ? Math.min(1, v/state.totalExp) : 0;
     return `<div style="display:grid;grid-template-columns:70px 1fr 48px;gap:8px;align-items:center">
       <div class="tiny">${k}</div>
       <div class="bar"><span style="width:${Math.round(pct*100)}%"></span></div>
       <div class="mono" style="text-align:right">${v}</div>
     </div>`;
   }).join('');
+
   showOverlay(`
     <h3 style="margin:.2em 0; font-size:var(--fs-18)">Status</h3>
     <div class="tiny">Stage • Line</div>
@@ -70,34 +87,77 @@ function openSettings(){
       <button class="btn" id="save">Save</button>
       <button class="btn warn" id="reset">Reset</button>
     </div>
+
     <div class="tiny" style="margin-top:8px">Export / Import</div>
     <div class="flex">
       <button class="btn secondary" id="export">Export JSON</button>
       <button class="btn secondary" id="import">Import JSON</button>
     </div>
   `);
-  document.getElementById('save').onclick=()=>{ state.name=(document.getElementById('nick').value||'').trim()||state.name; persist(); refresh(); hideOverlay(); };
-  document.getElementById('reset').onclick=()=>{
-    if(confirm('Reset everything? This cannot be undone.')){ Object.assign(state, { ...state, ...{level:1, sexp:Object.fromEntries(Object.keys(state.sexp).map(k=>[k,0])), totalExp:0, tasks:[], tasksDone:0, wins:0, battles:0} }); recalcTotals(); recalcLineStats(true); persist(); refresh(); hideOverlay(); }
+
+  // Basic settings
+  document.getElementById('save').onclick = ()=>{
+    state.name = (document.getElementById('nick').value||'').trim() || state.name;
+    persist(); refresh(); hideOverlay();
   };
-  document.getElementById('export').onclick=()=>{
-    const blob=new Blob([JSON.stringify(state)],{type:'application/json'});
-    const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='vital-tasks-save.json'; a.click(); URL.revokeObjectURL(url);
+
+  document.getElementById('reset').onclick = ()=>{
+    if(confirm('Reset everything? This cannot be undone.')){
+      // Soft reset without losing createdAt
+      state.sexp = Object.fromEntries(Object.keys(state.sexp).map(k=>[k,0]));
+      state.totalExp = 0;
+      state.tasks = [];
+      state.tasksDone = 0;
+      state.wins = 0;
+      state.battles = 0;
+      state.level = 1;
+      state.line = 'POWER';
+      state.speciesIndex = 0;
+      recalcTotals(); recalcLineStats(true); persist(); refresh(); hideOverlay();
+    }
   };
-  document.getElementById('import').onclick=()=>{
-    const inp=document.createElement('input'); inp.type='file'; inp.accept='application/json';
-    inp.onchange=e=>{
-      const f=e.target.files[0]; if(!f) return;
-      const reader=new FileReader(); reader.onload=()=>{
-        try{ const obj=JSON.parse(reader.result); Object.assign(state, obj); recalcTotals(); recalcLineStats(true); persist(); refresh(); hideOverlay(); }
-        catch(err){ alert('Invalid JSON.'); }
-      }; reader.readAsText(f);
-    }; inp.click();
+
+  // ----- Export (uses robust exportSave) -----
+  document.getElementById('export').onclick = ()=>{
+    const blob = new Blob([exportSave()], {type:'application/json'});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = 'vital-tasks-save.json'; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // ----- Import (uses robust importSave) -----
+  document.getElementById('import').onclick = ()=>{
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = 'application/json,application/*+json,.json';
+    inp.onchange = e=>{
+      const f = e.target.files?.[0]; if(!f) return;
+      const reader = new FileReader();
+      reader.onload = ()=>{
+        try{
+          const raw = JSON.parse(reader.result);
+          const res = importSave(raw); // validates, normalizes, recomputes, persists
+          refresh();
+          setTimeout(()=>{
+            toast(`Imported ${res.tasks} tasks • L${res.level} (${res.line}) ✔️`);
+            hideOverlay();
+          }, 50);
+        }catch(err){
+          alert('Import failed: ' + (err?.message || err));
+        }
+      };
+      reader.readAsText(f);
+    };
+    inp.click();
   };
 }
 
 /* ---------- Boot ---------- */
-recalcTotals(); recalcLineStats(true); refresh();
-renderMenu(); setIndex(0);
+recalcTotals();
+recalcLineStats(true);
+refresh();
+renderMenu();
+setIndex(0);
 requestAnimationFrame(tick);
 setTimeout(()=>toast('Modular build ready. Add your first task! 💡', 1400), 500);
